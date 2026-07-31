@@ -1,29 +1,30 @@
+import tempfile
 from datetime import datetime, timedelta
+from pathlib import Path
 
-import utils
+from pylatex import Center, Command, Document, LineBreak, Tabular
+from pylatex.utils import NoEscape, bold
 
-# Get the current date, 20 days ago
-today = datetime.now() - timedelta(days=20)
+from runner.models import JobFile
 
-# Calculate the first day of the next month
-# Handle year and month overflow (e.g., December to January)
-next_month = today.month % 12 + 1
-next_year = today.year + (today.month // 12)
-fd = datetime(next_year, next_month, 1)
+from . import utils
 
-# Calculate the last day of the next month
-# Handle year and month overflow
-next_next_month = (today.month + 1) % 12
-next_next_year = today.year + ((today.month + 1) // 12)
-ld = datetime(next_next_year, next_month + 1, 1) - timedelta(days=1)
-print(fd, ld)
+ASSETS_DIR = Path(__file__).resolve().parent
 
 
-def gen_doc(df):
-    from pylatex import Center, Command, Document, Figure, LineBreak, Tabular
-    from pylatex.utils import NoEscape, bold
+def _date_range():
+    today = datetime.now() - timedelta(days=20)
+    next_month = today.month % 12 + 1
+    next_year = today.year + (today.month // 12)
+    fd = datetime(next_year, next_month, 1)
 
-    # Create a LaTeX document
+    next_next_month = (today.month + 1) % 12
+    next_next_year = today.year + ((today.month + 1) // 12)
+    ld = datetime(next_next_year, next_month + 1, 1) - timedelta(days=1)
+    return fd, ld
+
+
+def _gen_doc(df, fd, ld):
     geometry_options = {
         "tmargin": "0in",
         "lmargin": "0in",
@@ -34,8 +35,10 @@ def gen_doc(df):
     doc.append(Command("pagenumbering", "gobble"))
 
     doc.preamble.append(NoEscape(r"\usepackage{graphicx}"))
-    # doc.preamble.append(NoEscape(r"\usepackage[hidelinks]{hyperref}"))
     doc.preamble.append(NoEscape(r"\usepackage{hyperref}"))
+    # Images live alongside this script, not in the compile cwd, so point
+    # LaTeX at them explicitly instead of changing every \includegraphics call.
+    doc.preamble.append(NoEscape(r"\graphicspath{{" + str(ASSETS_DIR) + r"/}}"))
 
     doc.append(NoEscape(r"""
     \noindent
@@ -65,7 +68,6 @@ def gen_doc(df):
         doc.append(LineBreak())
 
         doc.preamble.append(NoEscape(r"\setlength{\tabcolsep}{12pt}"))
-        # Add a table to the document
         with doc.create(Tabular("|c|c|c|c|c|c|c|c|c|", row_height=1.35)) as table:
             table.add_hline()
             table.add_row(df.columns)
@@ -100,15 +102,22 @@ def gen_doc(df):
         doc.append(LineBreak())
         doc.append(bold("https://uwe.isoc.link/timetable"))
 
-    # Save the document to a PDF file
-    doc.generate_pdf("prayer_time", clean_tex=True)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        pdf_path = Path(tmp_dir) / "prayer_time"
+        doc.generate_pdf(str(pdf_path), clean_tex=True)
+        return pdf_path.with_suffix(".pdf").read_bytes()
 
 
-utils.get_csv(1, fd, ld)
-utils.get_csv(2, fd, ld)
+def run():
+    fd, ld = _date_range()
 
-data = utils.get_formatted_data()
+    s_data = utils.get_csv(1, fd, ld)
+    h_data = utils.get_csv(2, fd, ld)
 
-gen_doc(data)
+    data = utils.get_formatted_data(s_data, h_data)
 
-data.to_csv("prayers.csv", index=False)
+    pdf_bytes = _gen_doc(data, fd, ld)
+
+    data.to_csv("prayers.csv", index=False)
+
+    return JobFile(pdf_bytes, "prayer_time.pdf", "application/pdf")

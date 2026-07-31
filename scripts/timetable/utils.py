@@ -1,3 +1,7 @@
+import io
+
+import pandas as pd
+import requests
 from pylatex.utils import bold
 
 
@@ -22,19 +26,18 @@ def add_classes(t, classes):
 
 
 def get_csv(t, fd, ld):
-    import requests
 
     if t == 1:
         hlm = "4"
         acm = "1"
-        file_name = "s.csv"
+        url = "https://cyb3rmutant.github.io/uwe-timetable-generator/s.csv"
     elif t == 2:
         hlm = "3"
         acm = "2"
-        file_name = "h.csv"
+        url = "https://cyb3rmutant.github.io/uwe-timetable-generator/h.csv"
     else:
         exit()
-    url = "https://downloads.salahtimes.com/api/prayerDownload"
+    # url = "https://downloads.salahtimes.com/api/prayerDownload"
     headers = {
         "Sec-Fetch-Dest": "document",
         "Sec-Fetch-Mode": "navigate",
@@ -54,16 +57,11 @@ def get_csv(t, fd, ld):
 
     response = requests.get(url, headers=headers, params=params)
 
-    with open(file_name, "wb") as file:
-        file.write(response.content)
+    response.raise_for_status()
+    return pd.read_csv(io.StringIO(response.text))
 
 
-def get_formatted_data():
-    import pandas as pd
-
-    s_data = pd.read_csv("s.csv")
-    h_data = pd.read_csv("h.csv")
-    print(h_data)
+def get_formatted_data(s_data, h_data):
     s_data.insert(loc=5, column="Asr Hanafi", value=h_data["Asar"])
     s_data = s_data.rename(columns={"Asar": "Asr Shafi"})
     x = s_data["Date"].str.split(" ", expand=True)[[0, 1]]
