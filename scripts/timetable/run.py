@@ -101,9 +101,9 @@ def _gen_doc(df, fd, ld):
         doc.append(LineBreak())
         doc.append(bold("https://uwe.isoc.link/timetable"))
 
-        pdf_path = Path(__file__).parent / "prayer_time"
-        doc.generate_pdf(str(pdf_path), clean_tex=True)
-        return pdf_path.with_suffix(".pdf").read_bytes()
+    pdf_path = Path(__file__).parent / "prayer_time"
+    doc.generate_pdf(str(pdf_path), clean_tex=True)
+    return pdf_path.with_suffix(".pdf").read_bytes()
 
 
 def run():
