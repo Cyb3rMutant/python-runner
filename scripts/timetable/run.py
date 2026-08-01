@@ -1,4 +1,3 @@
-import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -102,8 +101,7 @@ def _gen_doc(df, fd, ld):
         doc.append(LineBreak())
         doc.append(bold("https://uwe.isoc.link/timetable"))
 
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        pdf_path = Path(tmp_dir) / "prayer_time"
+        pdf_path = Path(__file__).parent / "prayer_time"
         doc.generate_pdf(str(pdf_path), clean_tex=True)
         return pdf_path.with_suffix(".pdf").read_bytes()
 
