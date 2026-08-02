@@ -30,14 +30,12 @@ def get_csv(t, fd, ld):
     if t == 1:
         hlm = "4"
         acm = "1"
-        url = "https://cyb3rmutant.github.io/uwe-timetable-generator/s.csv"
     elif t == 2:
         hlm = "3"
         acm = "2"
-        url = "https://cyb3rmutant.github.io/uwe-timetable-generator/h.csv"
     else:
         exit()
-    # url = "https://downloads.salahtimes.com/api/prayerDownload"
+    url = "https://downloads.salahtimes.com/api/prayerDownload"
     headers = {
         "Sec-Fetch-Dest": "document",
         "Sec-Fetch-Mode": "navigate",

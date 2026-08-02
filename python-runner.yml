@@ -1,10 +1,6 @@
 services:
-  timetable:
+  python-runner:
     build: .
     restart: unless-stopped
     volumes:
       - .:/app
-      - ~/.ssh:/root/.ssh:ro
-    environment:
-      GIT_USER_NAME: ${GIT_USER_NAME:-d}
-      GIT_USER_EMAIL: ${GIT_USER_EMAIL:-dev@yzd.uk}
