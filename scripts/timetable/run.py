@@ -2,6 +2,7 @@ import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import pandas as pd
 from pylatex import Center, Command, Document, LineBreak, Tabular
 from pylatex.utils import NoEscape, bold
 
@@ -108,13 +109,31 @@ def _gen_doc(df, fd, ld):
         return pdf_path.with_suffix(".pdf").read_bytes()
 
 
+def _timetable_data(fd, ld):
+    rows = []
+    for offset in range((ld - fd).days + 1):
+        d = fd + timedelta(days=offset)
+        times = utils.get_prayer_times(d)
+        rows.append(
+            {
+                "Date": d.strftime("%d %b %Y"),
+                "Day": d.strftime("%a"),
+                "Fajr": times["fajr"],
+                "Sunrise": times["sunrise"],
+                "Dhuhr": times["dhuhr"],
+                "Asr Shafi": times["asr shafi"],
+                "Asr Hanafi": times["asr hanafi"],
+                "Maghrib": times["maghrib"],
+                "Isha": times["isha"],
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def run():
     fd, ld = _date_range()
 
-    s_data = utils.get_csv(1, fd, ld)
-    h_data = utils.get_csv(2, fd, ld)
-
-    data = utils.get_formatted_data(s_data, h_data)
+    data = _timetable_data(fd, ld)
 
     pdf_bytes = _gen_doc(data, fd, ld)
 
