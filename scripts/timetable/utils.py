@@ -15,9 +15,17 @@ def add_class(t, c, b=False):
     t.add_row([c])
 
 
+def no_classes(t):
+    t.add_hline()
+    t.add_row(["ALL CLASSES ARE PAUSED"])
+    t.add_row(["UNTIL NEXT TERM"])
+
+
 def add_classes(t, classes):
     for c in classes:
         add_class(t, c.text, c.bold)
+    if len(classes) == 1:
+        no_classes(t)
     t.add_hline()
     return t
 
