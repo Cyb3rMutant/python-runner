@@ -15,12 +15,7 @@ MEDIA_TYPES = {
 app = FastAPI(title="Python Runner")
 
 
-@app.get("/jobs")
-def list_jobs():
-    return {"jobs": sorted(JOBS)}
-
-
-@app.get("/jobs/{name}")
+@app.get("/{name}")
 def run_job(name: str):
     if name not in JOBS:
         raise HTTPException(status_code=404, detail=f"no job named '{name}'")
