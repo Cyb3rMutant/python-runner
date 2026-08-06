@@ -1,3 +1,4 @@
+import pandas as pd
 from pylatex.utils import bold
 
 
@@ -192,6 +193,27 @@ def get_prayer_times(
     d, location=[51.4545, -2.5879], tz="Europe/London", fajr_angle=15, isha_angle=15
 ):
     return PrayTime(location, tz, fajr_angle, isha_angle).times(d)
+
+
+def timetable_data(fd, ld):
+    rows = []
+    for offset in range((ld - fd).days + 1):
+        d = fd + timedelta(days=offset)
+        times = get_prayer_times(d)
+        rows.append(
+            {
+                "Date": d.strftime("%d"),
+                "Day": d.strftime("%a"),
+                "Fajr": times["fajr"],
+                "Sunrise": times["sunrise"],
+                "Dhuhr": times["dhuhr"],
+                "Asr Shafi": times["asr shafi"],
+                "Asr Hanafi": times["asr hanafi"],
+                "Maghrib": times["maghrib"],
+                "Isha": times["isha"],
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 def add_ramadan_columns(dt):

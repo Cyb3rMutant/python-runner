@@ -1,11 +1,15 @@
-import threading
-
 from fastapi import FastAPI, HTTPException, Response
-from starlette.concurrency import run_in_threadpool
 
 from .registry import JOBS
 
-_locks = {name: threading.Lock() for name in JOBS}
+MEDIA_TYPES = {
+    "pdf": "application/pdf",
+    "csv": "text/csv",
+    "txt": "text/plain",
+    "json": "application/json",
+    "png": "image/png",
+    "jpg": "image/jpeg",
+}
 
 
 app = FastAPI(title="Python Runner")
@@ -16,28 +20,18 @@ def list_jobs():
     return {"jobs": sorted(JOBS)}
 
 
-@app.post("/jobs/{name}/run")
-async def run_job(name: str):
+@app.get("/jobs/{name}")
+def run_job(name: str):
     if name not in JOBS:
         raise HTTPException(status_code=404, detail=f"no job named '{name}'")
 
-    lock = _locks[name]
-    if not lock.acquire(blocking=False):
-        raise HTTPException(status_code=409, detail=f"job '{name}' is already running")
-
     try:
-        try:
-            job_file = await run_in_threadpool(JOBS[name])
-        except Exception as exc:
-            print(exc)
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        content, file_type = JOBS[name]()
+    except Exception as exc:
+        print(exc)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-        headers = {"Content-Disposition": f'attachment; filename="{job_file.filename}"'}
+    media_type = MEDIA_TYPES.get(file_type, "application/octet-stream")
+    headers = {"Content-Disposition": f'attachment; filename="data.{file_type}"'}
 
-        return Response(
-            content=job_file.content,
-            media_type=job_file.media_type,
-            headers=headers,
-        )
-    finally:
-        lock.release()
+    return Response(content=content, media_type=media_type, headers=headers)

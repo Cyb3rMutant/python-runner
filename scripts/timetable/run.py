@@ -2,18 +2,15 @@ import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import pandas as pd
 from pylatex import Center, Command, Document, LineBreak, Tabular
 from pylatex.utils import NoEscape, bold
-
-from runner.models import JobFile
 
 from . import utils
 
 ASSETS_DIR = Path(__file__).resolve().parent
 
 
-def _date_range():
+def date_range():
     today = datetime.now() - timedelta(days=20)
     next_month = today.month % 12 + 1
     next_year = today.year + (today.month // 12)
@@ -25,7 +22,7 @@ def _date_range():
     return fd, ld
 
 
-def _gen_doc(df, fd, ld):
+def gen_doc(df, fd, ld):
     geometry_options = {
         "tmargin": "0in",
         "lmargin": "0in",
@@ -89,12 +86,7 @@ def _gen_doc(df, fd, ld):
                     "Jumuah prayer 13:00, UWE Centre for Sport, BS16 1ZL, open to Brothers and Sisters",
                     True,
                 ),
-                utils.ClassRow(
-                    "Sisters Quran circle - Mondays 18:30 - online, link on whatsapp channel"
-                ),
-                utils.ClassRow(
-                    "Quran circle, Seerah class, Al-Aqsa series and Roots are all paused until faurther notice"
-                ),
+                utils.ClassRow("ALL CLASSES PAUSED UNTIL FAURTHER NOTICE"),
             ],
         )
 
@@ -109,32 +101,11 @@ def _gen_doc(df, fd, ld):
         return pdf_path.with_suffix(".pdf").read_bytes()
 
 
-def _timetable_data(fd, ld):
-    rows = []
-    for offset in range((ld - fd).days + 1):
-        d = fd + timedelta(days=offset)
-        times = utils.get_prayer_times(d)
-        rows.append(
-            {
-                "Date": d.strftime("%d %b %Y"),
-                "Day": d.strftime("%a"),
-                "Fajr": times["fajr"],
-                "Sunrise": times["sunrise"],
-                "Dhuhr": times["dhuhr"],
-                "Asr Shafi": times["asr shafi"],
-                "Asr Hanafi": times["asr hanafi"],
-                "Maghrib": times["maghrib"],
-                "Isha": times["isha"],
-            }
-        )
-    return pd.DataFrame(rows)
-
-
 def run():
-    fd, ld = _date_range()
+    fd, ld = date_range()
 
-    data = _timetable_data(fd, ld)
+    data = utils.timetable_data(fd, ld)
 
-    pdf_bytes = _gen_doc(data, fd, ld)
+    pdf_bytes = gen_doc(data, fd, ld)
 
-    return JobFile(pdf_bytes, "prayer_time.pdf", "application/pdf")
+    return pdf_bytes, "pdf"
