@@ -19,6 +19,7 @@ numpy==2.2.5
 oauthlib==3.2.2
 ordered-set==4.1.0
 pandas==2.2.3
+Pillow==11.1.0
 proto-plus==1.26.1
 protobuf==6.30.2
 pyasn1==0.6.1
@@ -26,7 +27,9 @@ pyasn1_modules==0.4.2
 PyLaTeX==1.4.2
 pyparsing==3.2.3
 python-dateutil==2.9.0.post0
+python-multipart==0.0.20
 pytz==2025.2
+reportlab==4.2.5
 requests==2.32.3
 requests-oauthlib==2.0.0
 rsa==4.9.1
