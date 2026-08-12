@@ -29,6 +29,7 @@ pyparsing==3.2.3
 python-dateutil==2.9.0.post0
 python-multipart==0.0.20
 pytz==2025.2
+qrcode==8.0
 reportlab==4.2.5
 requests==2.32.3
 requests-oauthlib==2.0.0

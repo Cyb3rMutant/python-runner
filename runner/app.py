@@ -1,4 +1,5 @@
-from fastapi import FastAPI, File, HTTPException, Response, UploadFile
+from fastapi import FastAPI, HTTPException, Request, Response
+from starlette.datastructures import UploadFile
 
 from .registry import JOBS
 
@@ -15,12 +16,12 @@ MEDIA_TYPES = {
 app = FastAPI(title="Python Runner")
 
 
-def _run_job(name: str, *args):
+def _run_job(name: str, *args, **kwargs):
     if name not in JOBS:
         raise HTTPException(status_code=404, detail=f"no job named '{name}'")
 
     try:
-        content, file_type = JOBS[name](*args)
+        content, file_type = JOBS[name](*args, **kwargs)
     except Exception as exc:
         print(exc)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -37,5 +38,15 @@ def run_job(name: str):
 
 
 @app.post("/{name}")
-async def run_job_with_input(name: str, file: UploadFile = File(...)):
-    return _run_job(name, await file.read())
+async def run_job_with_input(name: str, request: Request):
+    form = await request.form()
+
+    file_bytes = None
+    params = {}
+    for key, value in form.multi_items():
+        if isinstance(value, UploadFile):
+            file_bytes = await value.read()
+        else:
+            params[key] = value
+
+    return _run_job(name, file_bytes, **params)

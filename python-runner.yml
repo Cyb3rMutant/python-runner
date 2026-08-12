@@ -2,5 +2,7 @@ services:
   python-runner:
     build: .
     restart: unless-stopped
+    ports:
+      - 8088:8080
     volumes:
       - .:/app
