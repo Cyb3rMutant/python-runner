@@ -13,6 +13,23 @@ LOGON_URL = f"{BASE_URL}/PharosAPI/logon"
 USERNAME = os.environ.get("PHAROS_USERNAME")
 PASSWORD = os.environ.get("PHAROS_PASSWORD")
 
+CONTENT_TYPES = {
+    ".pdf": "application/pdf",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+}
+
+PAGE_SIZES = {"a4": "A4", "a3": "A3"}
+
+
+def _content_type(filename: str) -> str:
+    ext = os.path.splitext(filename)[1].lower()
+    try:
+        return CONTENT_TYPES[ext]
+    except KeyError:
+        raise ValueError(f"unsupported file type: {ext or filename}")
+
 
 def _require_creds() -> tuple[str, str]:
     if not USERNAME or not PASSWORD:
@@ -70,10 +87,12 @@ def login(session: requests.Session, username: str, password: str) -> dict:
 def submit_print_job(
     session: requests.Session,
     user_id: str,
-    pdf_bytes: bytes,
-    pdf_name: str,
+    file_bytes: bytes,
+    file_name: str,
+    content_type: str,
     mono: bool,
     copies: int,
+    page_size: str,
 ) -> dict:
     metadata = {
         "FinishingOptions": {
@@ -81,7 +100,7 @@ def submit_print_job(
             "Duplex": False,
             "PagesPerSide": "1",
             "Copies": str(copies),
-            "DefaultPageSize": "A4",
+            "DefaultPageSize": page_size,
             "PageRange": "",
         },
         "PrinterName": "",
@@ -90,7 +109,7 @@ def submit_print_job(
     resp = session.post(
         f"{BASE_URL}/PharosAPI/users/{user_id}/printjobs",
         data={"MetaData": json.dumps(metadata)},
-        files={"content": (pdf_name, pdf_bytes, "application/pdf")},
+        files={"content": (file_name, file_bytes, content_type)},
         headers={"X-Requested-With": "XMLHttpRequest", "Referer": PRINT_CENTER},
     )
     resp.raise_for_status()
@@ -103,11 +122,12 @@ def run(
     colour: str = "false",
     copies: str = "1",
     filename: str = "document.pdf",
+    size: str = "a4",
 ):
     username, password = _require_creds()
 
     if not file:
-        raise ValueError("a PDF `file` is required")
+        raise ValueError("a file (PDF, PNG or JPG) is required")
 
     colour_bool = colour.strip().lower() == "true"
     mono = not colour_bool
@@ -119,18 +139,25 @@ def run(
     except ValueError:
         raise ValueError("copies must be a positive integer")
 
-    if not filename.lower().endswith(".pdf"):
-        filename += ".pdf"
+    try:
+        page_size = PAGE_SIZES[size.strip().lower()]
+    except KeyError:
+        raise ValueError("size must be 'a4' or 'a3'")
+
+    content_type = _content_type(filename)
 
     session = requests.Session()
     logon_body = login(session, username, password)
     user_id = logon_body["Identifier"]
-    job = submit_print_job(session, user_id, file, filename, mono, copies_n)
+    job = submit_print_job(
+        session, user_id, file, filename, content_type, mono, copies_n, page_size
+    )
 
     body = {
         "name": job.get("Name", filename),
         "colour": colour_bool,
         "copies": copies_n,
+        "size": page_size,
         "state": job.get("PrintState", "Unknown"),
     }
 
