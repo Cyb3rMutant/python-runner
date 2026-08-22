@@ -1,152 +1,116 @@
+import base64
 import json
 import os
-from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
+import uuid
+from time import time
 
-from playwright.sync_api import sync_playwright
+import requests
 
 BASE_URL = "https://printme.uwe.ac.uk"
 PRINT_CENTER = f"{BASE_URL}/MyPrintCenter/"
-PROFILE = Path(__file__).parent / ".pharos-profile"
+LOGON_URL = f"{BASE_URL}/PharosAPI/logon"
 
 USERNAME = os.environ.get("PHAROS_USERNAME")
 PASSWORD = os.environ.get("PHAROS_PASSWORD")
 
 
-def _submit(pdf_bytes: bytes, pdf_name: str, mono: bool, copies: int) -> dict:
-    with sync_playwright() as p:
-        context = p.firefox.launch_persistent_context(str(PROFILE), headless=True)
+def _require_creds() -> tuple[str, str]:
+    if not USERNAME or not PASSWORD:
+        raise ValueError("PHAROS_USERNAME and PHAROS_PASSWORD env vars must be set")
+    return USERNAME, PASSWORD
 
-        page = context.pages[0] if context.pages else context.new_page()
-        page.goto(PRINT_CENTER)
-        page.wait_for_timeout(1500)
 
-        cookies = context.cookies()
+def login(session: requests.Session, username: str, password: str) -> dict:
+    """Pharos auth is a single GET with credentials packed into a custom
+    Authorization scheme (base64 "user:pass", same shape as HTTP Basic),
+    not a form POST - captured from the browser's Network tab."""
+    token = base64.b64encode(f"{username}:{password}".encode()).decode()
 
-        logged_in = any(
-            c["name"] == "PharosAPI.X-PHAROS-USER-TOKEN" and c["value"] for c in cookies
+    resp = session.get(
+        LOGON_URL,
+        params={
+            "KeepMeLoggedIn": "yes",
+            "includeprintjobs": "no",
+            "includedeviceactivity": "yes",
+            "includeprivileges": "yes",
+            "includecostcenters": "yes",
+            "excudeLocation": "yes",
+            "notRefreshBalance": "no",
+            "_request": str(uuid.uuid4()),
+            "_": str(int(time() * 1000)),
+        },
+        headers={
+            "X-Authorization": f"PHAROS-USER {token}",
+            "X-Requested-With": "XMLHttpRequest",
+            "Content-Type": "application/json",
+            "Referer": PRINT_CENTER,
+        },
+    )
+    resp.raise_for_status()
+    body = resp.json()
+
+    if (
+        isinstance(body, dict)
+        and isinstance(body.get("Status"), int)
+        and body["Status"] >= 300
+    ):
+        raise RuntimeError(
+            body.get("DeveloperMessage") or body.get("UserMessage") or "login failed"
         )
 
-        if not logged_in:
-            username = page.locator('input[id="input-login-username"]').first
-            password = page.locator('input[id="input-login-password"]').first
-
-            username.fill(USERNAME)
-            password.fill(PASSWORD)
-
-            remember = page.locator("#input-login-rememberme")
-            if remember.count() > 0 and not remember.is_checked():
-                remember.check()
-
-            password.press("Enter")
-
-            page.wait_for_timeout(20000)
-
-            cookies = context.cookies()
-
-            logged_in = any(
-                c["name"] == "PharosAPI.X-PHAROS-USER-TOKEN" and c["value"]
-                for c in cookies
-            )
-
-            if not logged_in:
-                context.close()
-                raise RuntimeError(
-                    "Automatic login failed - the login page may have changed "
-                    "or requires another step."
-                )
-
-        metadata = {
-            "FinishingOptions": {
-                "Mono": mono,
-                "Duplex": False,
-                "PagesPerSide": "1",
-                "Copies": str(copies),
-                "DefaultPageSize": "A4",
-                "PageRange": "",
-            },
-            "PrinterName": "",
-        }
-
-        result = page.evaluate(
-            """
-            async ({ pdfName, pdfBytes, metadata }) => {
-                const form = new FormData();
-
-                form.append(
-                    "MetaData",
-                    JSON.stringify(metadata)
-                );
-
-                const bytes = new Uint8Array(pdfBytes);
-
-                const blob = new Blob(
-                    [bytes],
-                    { type: "application/pdf" }
-                );
-
-                form.append(
-                    "content",
-                    blob,
-                    pdfName
-                );
-
-                const response = await fetch(
-                    "/PharosAPI/users/bBCGqYxxYVyMI0cEOY8nKA2/printjobs",
-                    {
-                        method: "POST",
-                        body: form,
-                        credentials: "include",
-                        headers: {
-                            "X-Requested-With": "XMLHttpRequest"
-                        }
-                    }
-                );
-
-                return {
-                    status: response.status,
-                    ok: response.ok,
-                    text: await response.text()
-                };
-            }
-            """,
-            {
-                "pdfName": pdf_name,
-                "pdfBytes": list(pdf_bytes),
-                "metadata": metadata,
-            },
+    if not session.cookies.get("PharosAPI.X-PHAROS-USER-TOKEN"):
+        raise RuntimeError(
+            "Login did not return a session token - the API response shape "
+            f"may have changed. Response body: {body!r}"
         )
 
-        context.close()
+    return body
 
-        if not result["ok"]:
-            raise RuntimeError(f"Upload failed: HTTP {result['status']} - {result['text']}")
 
-        return json.loads(result["text"])
+def submit_print_job(
+    session: requests.Session,
+    user_id: str,
+    pdf_bytes: bytes,
+    pdf_name: str,
+    mono: bool,
+    copies: int,
+) -> dict:
+    metadata = {
+        "FinishingOptions": {
+            "Mono": mono,
+            "Duplex": False,
+            "PagesPerSide": "1",
+            "Copies": str(copies),
+            "DefaultPageSize": "A4",
+            "PageRange": "",
+        },
+        "PrinterName": "",
+    }
+
+    resp = session.post(
+        f"{BASE_URL}/PharosAPI/users/{user_id}/printjobs",
+        data={"MetaData": json.dumps(metadata)},
+        files={"content": (pdf_name, pdf_bytes, "application/pdf")},
+        headers={"X-Requested-With": "XMLHttpRequest", "Referer": PRINT_CENTER},
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 def run(
     file: bytes | None = None,
     *,
-    colour: str = "mono",
+    colour: str = "false",
     copies: str = "1",
     filename: str = "document.pdf",
 ):
-    if not USERNAME or not PASSWORD:
-        raise ValueError(
-            "PHAROS_USERNAME and PHAROS_PASSWORD env vars must be set"
-        )
+    username, password = _require_creds()
 
     if not file:
         raise ValueError("a PDF `file` is required")
 
-    colour = colour.lower()
-    if colour in ("colour", "color"):
-        mono = False
-    elif colour in ("mono", "bw", "blackwhite"):
-        mono = True
-    else:
-        raise ValueError("colour must be 'colour' or 'mono'")
+    colour_bool = colour.strip().lower() == "true"
+    mono = not colour_bool
 
     try:
         copies_n = int(copies)
@@ -158,15 +122,14 @@ def run(
     if not filename.lower().endswith(".pdf"):
         filename += ".pdf"
 
-    # sync_playwright() refuses to run on a thread with an active asyncio
-    # event loop (which is where FastAPI calls this from), so do the work
-    # on a plain worker thread instead.
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        job = executor.submit(_submit, file, filename, mono, copies_n).result()
+    session = requests.Session()
+    logon_body = login(session, username, password)
+    user_id = logon_body["Identifier"]
+    job = submit_print_job(session, user_id, file, filename, mono, copies_n)
 
     body = {
         "name": job.get("Name", filename),
-        "colour": not mono,
+        "colour": colour_bool,
         "copies": copies_n,
         "state": job.get("PrintState", "Unknown"),
     }
