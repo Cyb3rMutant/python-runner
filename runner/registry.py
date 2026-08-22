@@ -16,6 +16,8 @@ To add a new script:
 """
 
 from scripts.img_a3.run import run as img_a3
+from scripts.polr.run import run as polr
+from scripts.print.run import run as print_job
 from scripts.qr_style.run import run as qr_style
 from scripts.timetable.run import run as timetable
 
@@ -23,4 +25,6 @@ JOBS = {
     "timetable": timetable,
     "img-a3": img_a3,
     "qr-style": qr_style,
+    "print": print_job,
+    "polr": polr,
 }

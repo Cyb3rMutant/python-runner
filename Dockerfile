@@ -13,6 +13,7 @@ WORKDIR /app
 
 COPY requirements /app/requirements
 RUN pip install --no-cache-dir -r requirements
+RUN playwright install --with-deps firefox
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

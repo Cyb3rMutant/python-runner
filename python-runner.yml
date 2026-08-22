@@ -6,3 +6,9 @@ services:
       - 8088:8080
     volumes:
       - .:/app
+    environment:
+      - PHAROS_USERNAME=${PHAROS_USERNAME}
+      - PHAROS_PASSWORD=${PHAROS_PASSWORD}
+      - POLR_USERNAME=${POLR_USERNAME}
+      - POLR_PASSWORD=${POLR_PASSWORD}
+      - POLR_API_KEY=${POLR_API_KEY}
