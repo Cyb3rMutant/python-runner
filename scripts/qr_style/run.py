@@ -36,29 +36,9 @@ def module_mask(img: Image.Image, threshold: int) -> Image.Image:
     return gray.point(lambda p: 255 if p < threshold else 0)
 
 
-def gradient_layer(size, c1, c2, direction="diagonal") -> Image.Image:
-    w, h = size
-    layer = Image.new("RGBA", size)
-    px = layer.load()
-    for y in range(h):
-        for x in range(w):
-            if direction == "horizontal":
-                t = x / max(w - 1, 1)
-            elif direction == "vertical":
-                t = y / max(h - 1, 1)
-            else:  # diagonal
-                t = (x + y) / max(w + h - 2, 1)
-            px[x, y] = tuple(int(c1[i] + (c2[i] - c1[i]) * t) for i in range(4))
-    return layer
-
-
-def restyle(img: Image.Image, fg: str, fg2: str | None, bg: str, direction: str, threshold: int) -> Image.Image:
+def restyle(img: Image.Image, fg: str, bg: str, threshold: int) -> Image.Image:
     mask = module_mask(img, threshold)
-
-    if fg2:
-        fg_layer = gradient_layer(img.size, hex_to_rgba(fg), hex_to_rgba(fg2), direction)
-    else:
-        fg_layer = Image.new("RGBA", img.size, hex_to_rgba(fg))
+    fg_layer = Image.new("RGBA", img.size, hex_to_rgba(fg))
 
     out = Image.new("RGBA", img.size, hex_to_rgba(bg))
     out.paste(fg_layer, (0, 0), mask)
@@ -70,16 +50,14 @@ def run(
     *,
     data: str | None = None,
     fg: str = "#000000",
-    fg2: str | None = None,
     bg: str = "#ffffff",
-    direction: str = "diagonal",
     threshold: str = "128",
 ):
     if bool(file) == bool(data):
         raise ValueError("provide exactly one of: an image `file`, or `data` text to encode")
 
     img = Image.open(io.BytesIO(file)).convert("RGBA") if file else generate_qr(data)
-    out = restyle(img, fg, fg2 or None, bg, direction, int(threshold))
+    out = restyle(img, fg, bg, int(threshold))
 
     buffer = io.BytesIO()
     out.save(buffer, format="PNG")
