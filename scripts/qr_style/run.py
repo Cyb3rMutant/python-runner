@@ -1,18 +1,26 @@
 import io
 
-from PIL import Image
+from PIL import Image, ImageColor
+
+_HEX_DIGITS = set("0123456789abcdefABCDEF")
 
 
 def hex_to_rgba(s: str) -> tuple[int, int, int, int]:
+    """Accepts a CSS colour name ("red"), or hex in 3/4/6/8-digit form,
+    with or without a leading '#' ("f00", "#f00", "ff0000", "#ff0000ff")."""
     s = s.strip()
     if s.lower() in ("transparent", "none"):
         return (0, 0, 0, 0)
-    s = s.lstrip("#")
-    if len(s) == 6:
-        s += "ff"
-    if len(s) != 8:
-        raise ValueError(f"bad color: {s!r}")
-    r, g, b, a = (int(s[i : i + 2], 16) for i in (0, 2, 4, 6))
+
+    body = s.lstrip("#")
+    is_hex = len(body) in (3, 4, 6, 8) and all(c in _HEX_DIGITS for c in body)
+    candidate = f"#{body}" if is_hex else s
+
+    try:
+        r, g, b, a = ImageColor.getcolor(candidate, "RGBA")
+    except ValueError as exc:
+        raise ValueError(f"bad color: {s!r}") from exc
+
     return (r, g, b, a)
 
 

@@ -34,10 +34,9 @@ def _waha_send_text(chat_id: str, text: str) -> None:
 
 def _waha_send_file(chat_id: str, content: bytes, file_type: str) -> None:
     mimetype = MEDIA_TYPES.get(file_type, "application/octet-stream")
-    endpoint = "sendImage" if mimetype.startswith("image/") else "sendFile"
 
     requests.post(
-        f"{WAHA_URL}/api/{endpoint}",
+        f"{WAHA_URL}/api/sendFile",
         json={
             "session": WAHA_SESSION,
             "chatId": chat_id,
@@ -77,7 +76,7 @@ async def waha_webhook(request: Request):
         _waha_send_text(chat_id, "Attach an image with your bot> request.")
         return {"status": "ok"}
 
-    decision = decide_what_to_call(text)
+    decision = decide_what_to_call(text, image_attached=True)
     print(decision)
     if not decision or decision["function"] not in JOB_TOOLS:
         _waha_send_text(
