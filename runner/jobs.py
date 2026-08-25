@@ -31,6 +31,7 @@ def run_job_get(name: str):
 @router.post("/{name}")
 async def run_job_post(name: str, request: Request):
     form = await request.form()
+    print(form)
 
     file_bytes = None
     params = {}

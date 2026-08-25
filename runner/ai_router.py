@@ -3,17 +3,26 @@ from fastapi import APIRouter, Request
 
 router = APIRouter()
 
-# Router function name -> JOBS registry key.
-# Both jobs act on the image attached to the WhatsApp message, so
-# neither tool exposes a `file` argument - only the styling options.
+# Router function name -> (JOBS registry key, fixed kwargs always passed
+# to that job alongside whatever the model extracts). to_a3/style_qr act
+# on the image attached to the message, so they don't need fixed kwargs.
+# The polr functions share one job with three different `action` values,
+# so each gets its own function name with `action` pinned - the model
+# only ever has to pick a function and fill in `ending`/`url`.
 JOB_TOOLS = {
-    "to_a3": "img-a3",
-    "style_qr": "qr-style",
+    "to_a3": ("img-a3", {}),
+    "style_qr": ("qr-style", {}),
+    "add_link": ("polr", {"action": "add"}),
+    "update_link": ("polr", {"action": "force_update"}),
+    "get_link": ("polr", {"action": "get"}),
 }
 
+# Functions that require an image attached to the message to run.
+IMAGE_REQUIRED = {"to_a3", "style_qr"}
+
 SYSTEM_PROMPT = """
-You are a function router for a WhatsApp bot that edits an image
-attached to the user's message.
+You are a function router for a WhatsApp bot that can edit an image
+attached to the user's message, or manage short links.
 
 Your only job is to decide which available function should handle
 the user's request and extract the arguments needed to call it.
@@ -21,15 +30,19 @@ the user's request and extract the arguments needed to call it.
 Every message you receive is prefixed with a line in square brackets
 telling you whether an image is attached, e.g. "[image attached]" or
 "[no image attached]". That line is not part of the user's request -
-never treat it as text to parse for arguments. Both functions require
-an attached image to run, so if the line says "[no image attached]",
-do not call a function even if the wording otherwise matches one.
+never treat it as text to parse for arguments.
+
+to_a3 and style_qr require an attached image to run, so if the line
+says "[no image attached]", do not call either of them even if the
+wording otherwise matches. add_link, update_link, and get_link never
+need an image - they act only on the link ending/URL you extract from
+the text, so call them regardless of whether an image is attached.
 
 IMPORTANT RULES:
 
 1. Do not answer the user's request yourself.
-2. Always use a function when the user's request matches one AND an
-   image is attached.
+2. Always use a function when the user's request matches one and any
+   image requirement (see above) is satisfied.
 3. Only use functions that are provided to you.
 4. Never invent a function.
 5. Never invent an argument - omit it if the user didn't specify it.
@@ -37,7 +50,12 @@ IMPORTANT RULES:
    name ("red", "cyan"), hex with or without "#" ("f00", "#f00",
    "070707", "#7a3ce2"). Do not convert names to hex or add/remove
    the "#" yourself - the function normalizes all of that.
-7. Keep your response minimal.
+7. add_link is for a brand new ending. update_link is for an ending
+   that already exists and should now point somewhere else - use it
+   whenever the user says "change"/"update"/"redirect"/"overwrite" an
+   existing link. Never call add_link when the user is asking to
+   change where an ending already points.
+8. Keep your response minimal.
 
 Examples:
 
@@ -55,6 +73,15 @@ User: "[image attached]\nchange the foreground in this qr to 070707 and backgrou
 
 User: "[no image attached]\nconvert this to a3"
 → do not call a function
+
+User: "[no image attached]\nmake a link called yt that goes to https://youtube.com"
+→ call add_link with ending="yt", url="https://youtube.com"
+
+User: "[no image attached]\nyt should now point to https://youtu.be/dQw4w9WgXcQ instead"
+→ call update_link with ending="yt", url="https://youtu.be/dQw4w9WgXcQ"
+
+User: "[no image attached]\nwhere does yt go"
+→ call get_link with ending="yt"
 
 Do not explain your decision.
 Do not return a normal conversational answer.
@@ -96,6 +123,78 @@ tools = [
                     },
                 },
                 "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_link",
+            "description": (
+                "Creates a brand new short link at uwe.isoc.link/<ending> "
+                "pointing to a URL. Fails if that ending is already taken - "
+                "use update_link instead when the ending already exists. "
+                "Returns a QR code for the new short link."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ending": {
+                        "type": "string",
+                        "description": "The short link ending to create, e.g. 'yt' for uwe.isoc.link/yt.",
+                    },
+                    "url": {
+                        "type": "string",
+                        "description": "The destination URL the new short link should point to.",
+                    },
+                },
+                "required": ["ending", "url"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_link",
+            "description": (
+                "Overwrites an existing short link at uwe.isoc.link/<ending> "
+                "so it points to a new URL. Use this instead of add_link "
+                "whenever the ending already exists and should now point "
+                "somewhere else. Returns a QR code for the short link."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ending": {
+                        "type": "string",
+                        "description": "The existing short link ending to update, e.g. 'yt' for uwe.isoc.link/yt.",
+                    },
+                    "url": {
+                        "type": "string",
+                        "description": "The new destination URL the short link should point to.",
+                    },
+                },
+                "required": ["ending", "url"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_link",
+            "description": (
+                "Looks up where the short link uwe.isoc.link/<ending> "
+                "currently points, and returns a QR code for it."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ending": {
+                        "type": "string",
+                        "description": "The short link ending to look up, e.g. 'yt' for uwe.isoc.link/yt.",
+                    },
+                },
+                "required": ["ending"],
             },
         },
     },

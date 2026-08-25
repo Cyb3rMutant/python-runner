@@ -4,7 +4,7 @@ import os
 import requests
 from fastapi import APIRouter, Request
 
-from .ai_router import JOB_TOOLS, decide_what_to_call
+from .ai_router import IMAGE_REQUIRED, JOB_TOOLS, decide_what_to_call
 from .media_types import MEDIA_TYPES
 from .registry import JOBS
 
@@ -72,24 +72,30 @@ async def waha_webhook(request: Request):
     text = body[len("bot>") :].strip()
 
     media = payload.get("media") if payload.get("hasMedia") else None
-    if not media or not media.get("url"):
-        _waha_send_text(chat_id, "Attach an image with your bot> request.")
-        return {"status": "ok"}
+    image_attached = bool(media and media.get("url"))
 
-    decision = decide_what_to_call(text, image_attached=True)
+    decision = decide_what_to_call(text, image_attached=image_attached)
     print(decision)
     if not decision or decision["function"] not in JOB_TOOLS:
         _waha_send_text(
-            chat_id, "Sorry, I couldn't work out what to do with that image."
+            chat_id, "Sorry, I couldn't work out what to do with that."
         )
         return {"status": "ok"}
 
-    image_resp = requests.get(media["url"])
-    image_resp.raise_for_status()
+    function_name = decision["function"]
+    if function_name in IMAGE_REQUIRED and not image_attached:
+        _waha_send_text(chat_id, "Attach an image with your bot> request.")
+        return {"status": "ok"}
 
-    job_name = JOB_TOOLS[decision["function"]]
+    file_bytes = None
+    if media and media.get("url"):
+        image_resp = requests.get(media["url"])
+        image_resp.raise_for_status()
+        file_bytes = image_resp.content
+
+    job_name, fixed_args = JOB_TOOLS[function_name]
     try:
-        content, file_type = JOBS[job_name](image_resp.content, **decision["arguments"])
+        content, file_type = JOBS[job_name](file_bytes, **fixed_args, **decision["arguments"])
     except Exception as exc:
         print(exc)
         _waha_send_text(chat_id, f"Couldn't do that: {exc}")
