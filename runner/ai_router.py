@@ -26,23 +26,13 @@ attached to the user's message, or manage short links.
 
 Your only job is to decide which available function should handle
 the user's request and extract the arguments needed to call it.
-
-Every message you receive is prefixed with a line in square brackets
-telling you whether an image is attached, e.g. "[image attached]" or
-"[no image attached]". That line is not part of the user's request -
-never treat it as text to parse for arguments.
-
-to_a3 and style_qr require an attached image to run, so if the line
-says "[no image attached]", do not call either of them even if the
-wording otherwise matches. add_link, update_link, and get_link never
-need an image - they act only on the link ending/URL you extract from
-the text, so call them regardless of whether an image is attached.
+Whether an image is actually attached is checked separately, after
+your decision - just match the wording to a function.
 
 IMPORTANT RULES:
 
 1. Do not answer the user's request yourself.
-2. Always use a function when the user's request matches one and any
-   image requirement (see above) is satisfied.
+2. Always use a function when the user's request matches one.
 3. Only use functions that are provided to you.
 4. Never invent a function.
 5. Never invent an argument - omit it if the user didn't specify it.
@@ -59,28 +49,25 @@ IMPORTANT RULES:
 
 Examples:
 
-User: "[image attached]\ncan you convert this to a3"
+User: "can you convert this to a3"
 → call to_a3
 
-User: "[image attached]\nneed this in a3"
+User: "need this in a3"
 → call to_a3
 
-User: "[image attached]\nneed this qr with cyan and red"
+User: "need this qr with cyan and red"
 → call style_qr with fg="cyan", bg="red"
 
-User: "[image attached]\nchange the foreground in this qr to 070707 and background to 7a3ce2"
+User: "change the foreground in this qr to 070707 and background to 7a3ce2"
 → call style_qr with fg="070707", bg="7a3ce2"
 
-User: "[no image attached]\nconvert this to a3"
-→ do not call a function
-
-User: "[no image attached]\nmake a link called yt that goes to https://youtube.com"
+User: "make a link called yt that goes to https://youtube.com"
 → call add_link with ending="yt", url="https://youtube.com"
 
-User: "[no image attached]\nyt should now point to https://youtu.be/dQw4w9WgXcQ instead"
+User: "yt should now point to https://youtu.be/dQw4w9WgXcQ instead"
 → call update_link with ending="yt", url="https://youtu.be/dQw4w9WgXcQ"
 
-User: "[no image attached]\nwhere does yt go"
+User: "where does yt go"
 → call get_link with ending="yt"
 
 Do not explain your decision.
@@ -201,14 +188,12 @@ tools = [
 ]
 
 
-def decide_what_to_call(text, image_attached: bool):
-    tag = "[image attached]" if image_attached else "[no image attached]"
-
+def decide_what_to_call(text):
     response = ollama.chat(
         model="qwen3:0.6b",
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"{tag}\n{text}"},
+            {"role": "user", "content": text},
         ],
         tools=tools,
         think=False,
@@ -231,5 +216,4 @@ def decide_what_to_call(text, image_attached: bool):
 async def ai_decide(request: Request):
     form = await request.form()
 
-    image_attached = form.get("image_attached", "true").strip().lower() == "true"
-    return decide_what_to_call(form.get("q"), image_attached)
+    return decide_what_to_call(form.get("q"))

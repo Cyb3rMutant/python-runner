@@ -74,7 +74,7 @@ async def waha_webhook(request: Request):
     media = payload.get("media") if payload.get("hasMedia") else None
     image_attached = bool(media and media.get("url"))
 
-    decision = decide_what_to_call(text, image_attached=image_attached)
+    decision = decide_what_to_call(text)
     print(decision)
     if not decision or decision["function"] not in JOB_TOOLS:
         _waha_send_text(
