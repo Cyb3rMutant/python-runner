@@ -100,20 +100,23 @@ def lookup_v2(url_ending: str) -> str | None:
     return resp.text.strip()
 
 
-def add(ending: str, url: str) -> None:
+def upsert_link(ending: str, url: str) -> str | None:
+    """Create the link if `ending` is free, or overwrite it if taken.
+    Returns the previous long URL if one existed, else None."""
     _require_api_key()
-    if lookup_v2(ending) is not None:
-        raise ValueError(f"'{ending}' already exists - use action=force_update to overwrite it")
-    shorten_v2(url, ending)
+    existing = lookup_v2(ending)
 
+    if existing is None:
+        shorten_v2(url, ending)
+        return None
 
-def force_update(ending: str, url: str) -> None:
     username, password = _require_admin_creds()
     session = requests.Session()
     login(session, username, password)
     result = edit_long_url(session, ending, url)
     if result.lower() != "success":
         raise RuntimeError(f"update failed: {result}")
+    return existing
 
 
 def get(ending: str) -> str:
@@ -134,21 +137,21 @@ def run(
     if not ending:
         raise ValueError("`ending` is required")
 
-    if action == "add":
-        if not url:
-            raise ValueError("`url` is required for action=add")
-        add(ending, url)
+    old_url = None
 
-    elif action == "force_update":
+    if action == "set":
         if not url:
-            raise ValueError("`url` is required for action=force_update")
-        force_update(ending, url)
+            raise ValueError("`url` is required for action=set")
+        old_url = upsert_link(ending, url)
 
     elif action == "get":
         get(ending)
 
     else:
-        raise ValueError(f"unknown action: {action!r} (expected add|force_update|get)")
+        raise ValueError(f"unknown action: {action!r} (expected set|get)")
 
     png_bytes, file_type = generate_styled_qr(data=f"{BASE_URL}/{ending}")
+
+    if old_url is not None:
+        return png_bytes, file_type, {"old_url": old_url}
     return png_bytes, file_type

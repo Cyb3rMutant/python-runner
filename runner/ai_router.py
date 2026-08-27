@@ -6,14 +6,13 @@ router = APIRouter()
 # Router function name -> (JOBS registry key, fixed kwargs always passed
 # to that job alongside whatever the model extracts). to_a3/style_qr act
 # on the image attached to the message, so they don't need fixed kwargs.
-# The polr functions share one job with three different `action` values,
-# so each gets its own function name with `action` pinned - the model
-# only ever has to pick a function and fill in `ending`/`url`.
+# set_link/get_link share one job with two different `action` values, so
+# each gets its own function name with `action` pinned - the model only
+# ever has to pick a function and fill in `ending`/`url`.
 JOB_TOOLS = {
     "to_a3": ("img-a3", {}),
     "style_qr": ("qr-style", {}),
-    "add_link": ("polr", {"action": "add"}),
-    "update_link": ("polr", {"action": "force_update"}),
+    "set_link": ("polr", {"action": "set"}),
     "get_link": ("polr", {"action": "get"}),
 }
 
@@ -40,12 +39,7 @@ IMPORTANT RULES:
    name ("red", "cyan"), hex with or without "#" ("f00", "#f00",
    "070707", "#7a3ce2"). Do not convert names to hex or add/remove
    the "#" yourself - the function normalizes all of that.
-7. add_link is for a brand new ending. update_link is for an ending
-   that already exists and should now point somewhere else - use it
-   whenever the user says "change"/"update"/"redirect"/"overwrite" an
-   existing link. Never call add_link when the user is asking to
-   change where an ending already points.
-8. Keep your response minimal.
+7. Keep your response minimal.
 
 Examples:
 
@@ -62,10 +56,10 @@ User: "change the foreground in this qr to 070707 and background to 7a3ce2"
 → call style_qr with fg="070707", bg="7a3ce2"
 
 User: "make a link called yt that goes to https://youtube.com"
-→ call add_link with ending="yt", url="https://youtube.com"
+→ call set_link with ending="yt", url="https://youtube.com"
 
 User: "yt should now point to https://youtu.be/dQw4w9WgXcQ instead"
-→ call update_link with ending="yt", url="https://youtu.be/dQw4w9WgXcQ"
+→ call set_link with ending="yt", url="https://youtu.be/dQw4w9WgXcQ"
 
 User: "where does yt go"
 → call get_link with ending="yt"
@@ -116,49 +110,24 @@ tools = [
     {
         "type": "function",
         "function": {
-            "name": "add_link",
+            "name": "set_link",
             "description": (
-                "Creates a brand new short link at uwe.isoc.link/<ending> "
-                "pointing to a URL. Fails if that ending is already taken - "
-                "use update_link instead when the ending already exists. "
-                "Returns a QR code for the new short link."
+                "Points the short link uwe.isoc.link/<ending> at a URL - "
+                "creates it if that ending doesn't exist yet, or overwrites "
+                "it if it does. Use this for any request to make, change, "
+                "or redirect a short link, whether or not it already exists. "
+                "Returns a QR code for the short link."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "ending": {
                         "type": "string",
-                        "description": "The short link ending to create, e.g. 'yt' for uwe.isoc.link/yt.",
+                        "description": "The short link ending, e.g. 'yt' for uwe.isoc.link/yt.",
                     },
                     "url": {
                         "type": "string",
-                        "description": "The destination URL the new short link should point to.",
-                    },
-                },
-                "required": ["ending", "url"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "update_link",
-            "description": (
-                "Overwrites an existing short link at uwe.isoc.link/<ending> "
-                "so it points to a new URL. Use this instead of add_link "
-                "whenever the ending already exists and should now point "
-                "somewhere else. Returns a QR code for the short link."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "ending": {
-                        "type": "string",
-                        "description": "The existing short link ending to update, e.g. 'yt' for uwe.isoc.link/yt.",
-                    },
-                    "url": {
-                        "type": "string",
-                        "description": "The new destination URL the short link should point to.",
+                        "description": "The destination URL the short link should point to.",
                     },
                 },
                 "required": ["ending", "url"],
@@ -170,8 +139,9 @@ tools = [
         "function": {
             "name": "get_link",
             "description": (
-                "Looks up where the short link uwe.isoc.link/<ending> "
-                "currently points, and returns a QR code for it."
+                "Confirms the short link uwe.isoc.link/<ending> exists and "
+                "returns a QR code for it. Fails if that ending doesn't "
+                "exist. Does not reveal the destination URL as text."
             ),
             "parameters": {
                 "type": "object",

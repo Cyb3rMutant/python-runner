@@ -95,12 +95,16 @@ async def waha_webhook(request: Request):
 
     job_name, fixed_args = JOB_TOOLS[function_name]
     try:
-        content, file_type = JOBS[job_name](file_bytes, **fixed_args, **decision["arguments"])
+        result = JOBS[job_name](file_bytes, **fixed_args, **decision["arguments"])
     except Exception as exc:
         print(exc)
         _waha_send_text(chat_id, f"Couldn't do that: {exc}")
         return {"status": "ok"}
 
+    content, file_type, meta = result if len(result) == 3 else (*result, {})
+
     _waha_send_file(chat_id, content, file_type)
+    if meta.get("old_url"):
+        _waha_send_text(chat_id, f"This used to point to: {meta['old_url']}")
 
     return {"status": "ok"}

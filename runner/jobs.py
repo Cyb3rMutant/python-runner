@@ -12,13 +12,16 @@ def run_job(name: str, *args, **kwargs):
         raise HTTPException(status_code=404, detail=f"no job named '{name}'")
 
     try:
-        content, file_type = JOBS[name](*args, **kwargs)
+        result = JOBS[name](*args, **kwargs)
     except Exception as exc:
         print(exc)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    content, file_type, meta = result if len(result) == 3 else (*result, {})
+
     media_type = MEDIA_TYPES.get(file_type, "application/octet-stream")
     headers = {"Content-Disposition": f'attachment; filename="data.{file_type}"'}
+    headers.update({f"X-{k.replace('_', '-')}": v for k, v in meta.items()})
 
     return Response(content=content, media_type=media_type, headers=headers)
 
