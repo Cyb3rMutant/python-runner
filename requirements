@@ -1,3 +1,5 @@
+--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+
 beautifulsoup4==4.13.4
 cachetools==5.5.2
 certifi==2025.4.26
@@ -16,9 +18,9 @@ googleapis-common-protos==1.70.0
 httplib2==0.22.0
 idna==3.10
 latex==0.7.0
+llama-cpp-python==0.3.35
 numpy==2.2.5
 oauthlib==3.2.2
-ollama==0.5.1
 ordered-set==4.1.0
 pandas==2.2.3
 Pillow==11.1.0
