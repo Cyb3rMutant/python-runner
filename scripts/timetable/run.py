@@ -86,12 +86,15 @@ def gen_doc(df, fd, ld):
                     "Jumuah prayer 13:00, UWE Centre for Sport, BS16 1ZL, open to Brothers and Sisters",
                     True,
                 ),
-                # utils.ClassRow(
-                #     "Sisters Quran circle - Mondays 18:30 - online, link on whatsapp channel"
-                # ),
-                # utils.ClassRow(
-                #     "Quran circle, Seerah class, Al-Aqsa series and Roots are all paused until faurther notice"
-                # ),
+                utils.ClassRow(
+                    "Quran circles - Mondays - Brothers 18:00 in Br. prayer room - Sisters 16:30 in Sis. prayer room"
+                ),
+                utils.ClassRow(
+                    "Book club - Tuesdays at 18:00 - Brother Amin - Brothers in 3E39, sisters online"
+                ),
+                utils.ClassRow(
+                    "Roots - Wednesdays at 17:30 - Ustadh Abu Malik - Brothers and Sisters in 2X112"
+                ),
             ],
         )
 
