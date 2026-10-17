@@ -29,6 +29,7 @@ protobuf==6.30.2
 pyasn1==0.6.1
 pyasn1_modules==0.4.2
 PyLaTeX==1.4.2
+PyMuPDF==1.25.5
 pyparsing==3.2.3
 python-dateutil==2.9.0.post0
 python-multipart==0.0.20
