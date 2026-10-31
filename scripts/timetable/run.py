@@ -87,7 +87,7 @@ def gen_doc(df, fd, ld):
                     True,
                 ),
                 utils.ClassRow(
-                    "Quran circles - Mondays - Brothers 18:00 in Br. prayer room - Sisters 16:30 in Sis. prayer room"
+                    "Quran circles - Mondays - Brothers 17:00 in Br. prayer room - Sisters 17:00 in Sis. prayer room"
                 ),
                 utils.ClassRow(
                     "Book club - Tuesdays at 18:00 - Brother Amin - Brothers in 3E39, sisters online"
