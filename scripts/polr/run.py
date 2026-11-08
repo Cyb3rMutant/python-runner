@@ -1,7 +1,8 @@
 """Polr admin link manager — uses the internal /api/v3 endpoint the
 admin dashboard itself calls for edits, since the public API doesn't
 expose that operation. Every action returns a black & white QR code
-for the resulting short link.
+for the resulting short link, plus meta with `short_url`, `long_url`
+and (when an existing link was overwritten) `old_url`.
 """
 
 import os
@@ -143,15 +144,18 @@ def run(
         if not url:
             raise ValueError("`url` is required for action=set")
         old_url = upsert_link(ending, url)
+        long_url = url
 
     elif action == "get":
-        get(ending)
+        long_url = get(ending)
 
     else:
         raise ValueError(f"unknown action: {action!r} (expected set|get)")
 
-    png_bytes, file_type = generate_styled_qr(data=f"{BASE_URL}/{ending}")
+    short_url = f"{BASE_URL}/{ending}"
+    png_bytes, file_type = generate_styled_qr(data=short_url)
 
+    meta = {"short_url": short_url, "long_url": long_url}
     if old_url is not None:
-        return png_bytes, file_type, {"old_url": old_url}
-    return png_bytes, file_type
+        meta["old_url"] = old_url
+    return png_bytes, file_type, meta

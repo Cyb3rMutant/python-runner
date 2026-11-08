@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import re
 
@@ -29,6 +30,8 @@ JOB_TOOLS = {
 
 # Functions that require an image attached to the message to run.
 IMAGE_REQUIRED = {"to_a3", "style_qr"}
+
+ROUTER_FUNCTIONS = ["to_a3", "style_qr", "set_link", "get_link", "none"]
 
 SYSTEM_PROMPT = """
 You are a function router for a WhatsApp bot that can edit an image
@@ -61,9 +64,9 @@ Available functions:
   whether or not it already exists. Returns a QR code for the short
   link. Arguments: ending, url (both required).
 
-- get_link: Confirms the short link uwe.isoc.link/<ending> exists and
-  returns a QR code for it. Does not reveal the destination URL as
-  text. Arguments: ending (required).
+- get_link: Looks up the short link uwe.isoc.link/<ending> and returns
+  where it points along with a QR code for it. Arguments: ending
+  (required).
 
 - none: Use this if the request doesn't match any function above. No
   arguments.
@@ -116,7 +119,7 @@ RESPONSE_SCHEMA = {
     "properties": {
         "function": {
             "type": "string",
-            "enum": ["to_a3", "style_qr", "set_link", "get_link", "none"],
+            "enum": ROUTER_FUNCTIONS,
         },
         "arguments": {
             "type": "object",
@@ -145,7 +148,71 @@ def _get_llm() -> Llama:
     return _llm
 
 
+def _chatml_prompt(user_text: str) -> str:
+    # Qwen2.5 uses ChatML - mirrors what create_chat_completion renders.
+    return (
+        f"<|im_start|>system\n{SYSTEM_PROMPT}<|im_end|>\n"
+        f"<|im_start|>user\n{user_text}<|im_end|>\n"
+        "<|im_start|>assistant\n"
+    )
+
+
+def _function_confidence(llm: Llama, user_text: str, output: str, chosen: str) -> float | None:
+    """Probability the model gave to `chosen` vs the other functions.
+
+    Real logprobs need logits_all=True, which allocates an n_ctx x n_vocab
+    float buffer (~1.2GB for Qwen's 150k vocab). Instead, re-feed the prompt
+    plus the generated JSON up to the function name's opening quote and read
+    the logits for the next token only. The prompt prefix is still in the KV
+    cache from the generation, so this is just a handful of tokens to eval.
+    Confidence = softmax over the first token of each allowed function name.
+    """
+    try:
+        value_start = output.index(f'"{chosen}"') + 1
+        prefix = _chatml_prompt(user_text) + output[:value_start]
+        tokens = llm.tokenize(prefix.encode(), add_bos=True, special=True)
+
+        first_tokens = {}
+        for name in ROUTER_FUNCTIONS:
+            first_tokens[name] = llm.tokenize(name.encode(), add_bos=False, special=False)[0]
+        if len(set(first_tokens.values())) != len(first_tokens):
+            return None  # names share a first token - can't tell them apart
+
+        # Reuse whatever prefix is already evaluated in the KV cache.
+        cached = llm.input_ids[: llm.n_tokens].tolist()
+        common = 0
+        for a, b in zip(cached, tokens):
+            if a != b:
+                break
+            common += 1
+        common = min(common, len(tokens) - 1)  # always eval at least one token
+        llm.n_tokens = common
+        llm.eval(tokens[common:])
+
+        logits = llm._ctx.get_logits()
+        scores = {name: logits[tok] for name, tok in first_tokens.items()}
+        top = max(scores.values())
+        exps = {name: math.exp(v - top) for name, v in scores.items()}
+        return exps[chosen] / sum(exps.values())
+    except Exception as exc:  # confidence is best-effort, never block a reply
+        print("confidence failed:", exc)
+        return None
+
+
+def _result(function, arguments=None, confidence=None, reason=None) -> dict:
+    return {
+        "function": function,
+        "arguments": arguments or {},
+        "confidence": confidence,
+        "reason": reason,
+    }
+
+
 def decide_what_to_call(text):
+    """Returns {"function", "arguments", "confidence", "reason"}.
+
+    `function` is None when nothing should run, with `reason` saying why.
+    """
     llm = _get_llm()
 
     # A model this small tends to fixate on the tokens inside an interesting
@@ -170,11 +237,14 @@ def decide_what_to_call(text):
         temperature=0,
     )
 
-    parsed = json.loads(response["choices"][0]["message"]["content"])
+    output = response["choices"][0]["message"]["content"]
+    parsed = json.loads(output)
 
     function_name = parsed.get("function")
+    confidence = _function_confidence(llm, masked_text, output, function_name) if function_name else None
+
     if not function_name or function_name == "none":
-        return None
+        return _result(None, confidence=confidence, reason="that doesn't match anything I can do")
 
     arguments = {k: v for k, v in parsed.get("arguments", {}).items() if v}
     if function_name == "set_link" and urls:
@@ -188,15 +258,21 @@ def decide_what_to_call(text):
     # hallucinated url) on a value that isn't actually in the message.
     if function_name in ("set_link", "get_link"):
         ending = arguments.get("ending")
-        if not ending or not re.search(rf"\b{re.escape(ending)}\b", text, re.IGNORECASE):
-            return None
+        if not ending:
+            return _result(None, confidence=confidence, reason=f"{function_name}: no link name given")
+        if not re.search(rf"\b{re.escape(ending)}\b", text, re.IGNORECASE):
+            return _result(
+                None,
+                confidence=confidence,
+                reason=f"{function_name}: guessed link name '{ending}' isn't in your message",
+            )
 
     if function_name == "set_link":
         url = arguments.get("url")
         if not url or url not in URL_RE.findall(text):
-            return None
+            return _result(None, confidence=confidence, reason="set_link: no url in your message")
 
-    return {"function": function_name, "arguments": arguments}
+    return _result(function_name, arguments, confidence)
 
 
 @router.post("/ai/decide")
